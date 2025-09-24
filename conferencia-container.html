@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Conferência de Container</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="fixed inset-0 bg-gray-900 flex flex-col items-center justify-center z-50">
+        <div class="loader"></div>
+        <p class="mt-4 text-lg text-gray-400">Conectando ao banco de dados...</p>
+    </div>
+
+    <div id="app-content" class="w-full max-w-4xl mx-auto hidden">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-cyan-400">Sistema de Conferência de Descarga</h1>
+            <p class="text-gray-400">Gerencie o descarregamento de containers de forma eficiente.</p>
+        </header>
+
+        <!-- Seção de Seleção de Conferência (Nova tela inicial) -->
+        <div id="selection-section" class="bg-gray-800 p-6 rounded-lg shadow-lg">
+             <div class="flex flex-wrap gap-4 justify-between items-center border-b border-gray-700 pb-2 mb-4">
+                 <h2 class="text-2xl font-semibold">Painel de Conferências</h2>
+                 <div class="flex gap-2">
+                    <button id="download-csv-btn" class="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed">
+                        Baixar Relatório (CSV)
+                    </button>
+                    <button id="create-new-btn" class="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">
+                       + Cadastrar Nova
+                    </button>
+                 </div>
+            </div>
+            
+            <!-- ABAS -->
+            <div class="mb-4 border-b border-gray-700">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button id="tab-pending" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg border-cyan-500 text-cyan-400">
+                        Pendentes
+                    </button>
+                    <button id="tab-completed" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500">
+                        Concluídas
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Conteúdo das Abas -->
+            <div id="pending-tab-content">
+                <div id="conference-list" class="space-y-3 max-h-96 overflow-y-auto">
+                    <p id="no-conferences-message" class="text-gray-500 text-center py-4">Nenhuma conferência pendente.</p>
+                </div>
+            </div>
+
+            <div id="completed-tab-content" class="hidden">
+                <div id="completed-conference-list" class="space-y-3 max-h-96 overflow-y-auto">
+                     <p id="no-completed-conferences-message" class="text-gray-500 text-center py-4">Nenhuma conferência concluída.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seção de Cadastro (Inicialmente oculta) -->
+        <div id="setup-section" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg">
+             <div class="flex justify-between items-center border-b border-gray-700 pb-2 mb-4">
+                <h2 class="text-2xl font-semibold">1. Cadastrar Nova Carga</h2>
+                <button id="back-to-selection-from-setup" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Voltar à Lista</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label for="container-number" class="block text-sm font-medium text-gray-300 mb-1">Nº do Container</label>
+                    <input type="text" id="container-number" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Ex: MSKU1234567">
+                </div>
+                <div>
+                    <label for="lote-number" class="block text-sm font-medium text-gray-300 mb-1">Lote</label>
+                    <input type="text" id="lote-number" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Ex: LOTE-001">
+                </div>
+            </div>
+
+            <form id="add-product-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label for="product-code" class="block text-sm font-medium text-gray-300 mb-1">Código do Produto</label>
+                    <input type="text" id="product-code" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Ex: VAB0002-C" required>
+                </div>
+                <div>
+                    <label for="product-quantity" class="block text-sm font-medium text-gray-300 mb-1">Quantidade Esperada</label>
+                    <input type="number" id="product-quantity" min="1" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Ex: 50" required>
+                </div>
+                <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Adicionar Produto</button>
+            </form>
+
+            <div class="mt-6">
+                <h3 class="font-semibold text-lg mb-2">Produtos a Receber:</h3>
+                <div id="product-list-container" class="max-h-60 overflow-y-auto bg-gray-900/50 p-3 rounded-md">
+                    <p id="empty-list-message" class="text-gray-500">Nenhum produto adicionado ainda.</p>
+                    <ul id="product-list" class="space-y-2"></ul>
+                </div>
+            </div>
+
+            <div class="mt-6 text-center">
+                <button id="save-conference-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition duration-300 disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>
+                    Salvar Conferência
+                </button>
+            </div>
+        </div>
+
+        <!-- Seção de Conferência (Inicialmente oculta) -->
+        <div id="conference-section" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg">
+            <div class="flex justify-between items-center border-b border-gray-700 pb-2 mb-4">
+                 <div>
+                    <h2 class="text-2xl font-semibold">2. Painel de Conferência</h2>
+                 </div>
+                 <div class="flex gap-2">
+                    <button id="register-problem-btn" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Registrar Ocorrência</button>
+                    <button id="manual-finalize-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Finalizar Manualmente</button>
+                    <button id="back-to-selection-from-conference" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Voltar à Lista</button>
+                 </div>
+            </div>
+            <div class="flex flex-wrap gap-x-6 gap-y-2 mb-4 text-lg">
+                <p>Container: <span id="display-container-number" class="font-bold text-cyan-400"></span></p>
+                <p>Lote: <span id="display-lote-number" class="font-bold text-cyan-400"></span></p>
+                <p>Tempo: <span id="elapsed-time" class="font-bold text-yellow-400">--:--:--</span></p>
+            </div>
+
+            <div id="problems-display-section" class="hidden bg-yellow-900/30 border border-yellow-700 p-4 rounded-lg my-4">
+                <h3 class="font-semibold text-lg mb-2 text-yellow-400">Observações Registradas</h3>
+                <p id="problems-display-text" class="text-gray-300 whitespace-pre-wrap"></p>
+            </div>
+
+            <div class="bg-gray-900/50 p-4 rounded-lg mb-4">
+                <h3 class="text-lg font-semibold mb-4 text-center">Progresso da Descarga</h3>
+                <div class="w-full max-w-sm mx-auto h-32 relative group">
+                    <div class="w-full h-full border-4 border-gray-500 bg-gray-800 rounded-md p-1.5">
+                        <div class="w-full h-full bg-gray-700 rounded-sm" style="background-image: repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 4px);"></div>
+                    </div>
+                    <div id="container-fill" class="absolute bottom-2 left-2 right-2 bg-cyan-600 rounded-sm transition-all duration-500 ease-in-out" style="height: 0%;"></div>
+                    <div class="absolute inset-0 flex justify-center items-center">
+                        <div class="w-1 h-[90%] bg-gray-900/50"></div>
+                        <span id="progress-percentage" class="absolute text-4xl font-bold text-white" style="text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">0%</span>
+                    </div>
+                </div>
+                <div class="flex justify-between text-sm font-medium text-gray-300 max-w-sm mx-auto mt-2">
+                    <span>Conferidos: <span id="scanned-count" class="font-bold">0</span> / <span id="total-count" class="font-bold">0</span></span>
+                    <span>Faltam: <span id="remaining-count" class="font-bold text-yellow-400">0</span></span>
+                </div>
+            </div>
+
+            <div class="space-y-4 mb-4">
+                <form id="scan-form">
+                    <label for="scan-input" class="block text-sm font-medium text-gray-300 mb-1">Bipagem Automática (Scanner)</label>
+                    <input type="text" id="scan-input" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-lg focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Aguardando leitura do scanner...">
+                </form>
+                <form id="manual-scan-form">
+                    <label for="manual-input" class="block text-sm font-medium text-gray-300 mb-1">Registro Manual (Etiqueta Danificada)</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="manual-input" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-lg focus:ring-2 focus:ring-amber-500 focus:outline-none" placeholder="Digite o código completo...">
+                        <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 whitespace-nowrap">Registrar</button>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <h3 class="font-semibold text-lg mb-2">Resumo da Conferência</h3>
+                     <div id="summary-container" class="max-h-72 overflow-y-auto bg-gray-900/50 p-3 rounded-md">
+                        <table class="w-full text-left">
+                            <thead class="sticky top-0 bg-gray-900/50">
+                                <tr>
+                                    <th class="p-2">Produto</th>
+                                    <th class="p-2 text-center">Conferido / Esperado</th>
+                                    <th class="p-2 text-center">Falta</th>
+                                    <th class="p-2 text-right">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="summary-table-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-lg mb-2">Últimas Leituras</h3>
+                    <div id="scan-log-container" class="max-h-72 overflow-y-auto bg-gray-900/50 p-3 rounded-md flex flex-col-reverse">
+                        <ul id="scan-log">
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Ocorrências / Finalização -->
+    <div id="problems-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 id="modal-title" class="text-xl font-bold mb-4">Título do Modal</h3>
+            <p id="modal-description" class="text-gray-400 mb-4">Descrição do modal.</p>
+            <textarea id="problems-textarea" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:outline-none" rows="4" placeholder="Ex: Faltaram 2 caixas do produto X. Uma caixa do produto Y veio avariada."></textarea>
+            <div class="flex justify-end gap-4 mt-6">
+                <button id="cancel-modal-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Cancelar</button>
+                <button id="confirm-modal-btn" class="font-bold py-2 px-4 rounded-md transition duration-300">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import Firebase SDKs
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            setDoc, 
+            getDoc,
+            updateDoc, 
+            onSnapshot,
+            serverTimestamp,
+            increment
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // Fallback Firebase configuration
+        const fallbackFirebaseConfig = {
+            apiKey: "AIzaSyCGQp7LMkoHdS1SDDUjKwfme4CxO0RYgo0",
+            authDomain: "sistema-conferencia-container.firebaseapp.com",
+            projectId: "sistema-conferencia-container",
+            storageBucket: "sistema-conferencia-container.firebasestorage.app", // Corrected bucket name
+            messagingSenderId: "457778245464",
+            appId: "1:457778245464:web:937e1f89832bd8dc4f3f2d",
+            measurementId: "G-241QHNZWYS"
+        };
+        
+        async function main() {
+            // --- Use environment variables if available, otherwise fallback ---
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : fallbackFirebaseConfig;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+            // Initialize Firebase
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+
+            // --- Authentication ---
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+            const userId = auth.currentUser.uid;
+            
+            // --- Correct Firestore collection paths ---
+            const conferencesColRef = collection(db, 'artifacts', appId, 'users', userId, 'conferences');
+            const allBarcodesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'allBarcodes');
+
+
+            // Show app content and hide loader
+            document.getElementById('loading-screen').classList.add('hidden');
+            document.getElementById('app-content').classList.remove('hidden');
+
+            // --- LOCAL STATE (mirror of Firestore) ---
+            let conferences = new Map();
+            let newConferenceProducts = new Map();
+            let activeConferenceKey = null;
+            let scanTimer = null;
+            let elapsedTimerInterval = null;
+            let isModalFinalizing = false;
+
+            // --- DOM Elements ---
+            const selectionSection = document.getElementById('selection-section');
+            const setupSection = document.getElementById('setup-section');
+            const conferenceSection = document.getElementById('conference-section');
+            const createNewBtn = document.getElementById('create-new-btn');
+            const downloadCsvBtn = document.getElementById('download-csv-btn');
+            const conferenceList = document.getElementById('conference-list');
+            const noConferencesMessage = document.getElementById('no-conferences-message');
+            const tabPending = document.getElementById('tab-pending');
+            const tabCompleted = document.getElementById('tab-completed');
+            const pendingTabContent = document.getElementById('pending-tab-content');
+            const completedTabContent = document.getElementById('completed-tab-content');
+            const completedConferenceList = document.getElementById('completed-conference-list');
+            const noCompletedConferencesMessage = document.getElementById('no-completed-conferences-message');
+            const backToSelectionFromSetup = document.getElementById('back-to-selection-from-setup');
+            const containerNumberInput = document.getElementById('container-number');
+            const loteNumberInput = document.getElementById('lote-number');
+            const addProductForm = document.getElementById('add-product-form');
+            const productCodeInput = document.getElementById('product-code');
+            const productQuantityInput = document.getElementById('product-quantity');
+            const productList = document.getElementById('product-list');
+            const emptyListMessage = document.getElementById('empty-list-message');
+            const saveConferenceBtn = document.getElementById('save-conference-btn');
+            const backToSelectionFromConference = document.getElementById('back-to-selection-from-conference');
+            const displayContainerNumber = document.getElementById('display-container-number');
+            const displayLoteNumber = document.getElementById('display-lote-number');
+            const elapsedTimeEl = document.getElementById('elapsed-time');
+            const containerFill = document.getElementById('container-fill');
+            const progressPercentage = document.getElementById('progress-percentage');
+            const scannedCount = document.getElementById('scanned-count');
+            const totalCount = document.getElementById('total-count');
+            const remainingCount = document.getElementById('remaining-count');
+            const scanForm = document.getElementById('scan-form');
+            const scanInput = document.getElementById('scan-input');
+            const manualScanForm = document.getElementById('manual-scan-form');
+            const manualInput = document.getElementById('manual-input');
+            const scanLog = document.getElementById('scan-log');
+            const summaryTableBody = document.getElementById('summary-table-body');
+            const manualFinalizeBtn = document.getElementById('manual-finalize-btn');
+            const registerProblemBtn = document.getElementById('register-problem-btn');
+            const problemsModal = document.getElementById('problems-modal');
+            const cancelModalBtn = document.getElementById('cancel-modal-btn');
+            const confirmModalBtn = document.getElementById('confirm-modal-btn');
+            const problemsTextarea = document.getElementById('problems-textarea');
+            const problemsDisplaySection = document.getElementById('problems-display-section');
+            const problemsDisplayText = document.getElementById('problems-display-text');
+            const modalTitle = document.getElementById('modal-title');
+            const modalDescription = document.getElementById('modal-description');
+            
+            // --- REALTIME LISTENER ---
+            onSnapshot(conferencesColRef, (snapshot) => {
+                const serverConferences = new Map();
+                snapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    // Convert Firestore objects back to Map/Set for local logic
+                    serverConferences.set(doc.id, {
+                        ...data,
+                        expectedProducts: new Map(Object.entries(data.expectedProducts || {})),
+                        scannedBarcodes: new Set(data.scannedBarcodes || []),
+                        // Convert Timestamps to JS Date objects if they exist
+                        startTime: data.startTime ? data.startTime.toMillis() : null,
+                        endTime: data.endTime ? data.endTime.toMillis() : null,
+                    });
+                });
+                conferences = serverConferences;
+                updateSelectionView();
+            });
+
+
+            function showScreen(screen) {
+                selectionSection.classList.add('hidden');
+                setupSection.classList.add('hidden');
+                conferenceSection.classList.add('hidden');
+                screen.classList.remove('hidden');
+            }
+
+            function switchTab(activeTab) {
+                if (activeTab === 'pending') {
+                    tabPending.classList.add('border-cyan-500', 'text-cyan-400');
+                    tabPending.classList.remove('border-transparent', 'text-gray-400');
+                    tabCompleted.classList.add('border-transparent', 'text-gray-400');
+                    tabCompleted.classList.remove('border-cyan-500', 'text-cyan-400');
+                    pendingTabContent.classList.remove('hidden');
+                    completedTabContent.classList.add('hidden');
+                } else {
+                    tabCompleted.classList.add('border-cyan-500', 'text-cyan-400');
+                    tabCompleted.classList.remove('border-transparent', 'text-gray-400');
+                    tabPending.classList.add('border-transparent', 'text-gray-400');
+                    tabPending.classList.remove('border-cyan-500', 'text-cyan-400');
+                    completedTabContent.classList.remove('hidden');
+                    pendingTabContent.classList.add('hidden');
+                }
+            }
+            
+            function updateSelectionView() {
+                conferenceList.innerHTML = '';
+                completedConferenceList.innerHTML = '';
+                let pendingCount = 0;
+                let completedCount = 0;
+                if (conferences.size === 0) {
+                    noConferencesMessage.classList.remove('hidden');
+                    noCompletedConferencesMessage.classList.remove('hidden');
+                }
+                conferences.forEach((conf, key) => {
+                    const totalExpected = Array.from(conf.expectedProducts.values()).reduce((sum, p) => sum + p.expected, 0);
+                    const totalScanned = Array.from(conf.expectedProducts.values()).reduce((sum, p) => sum + p.scanned, 0);
+                    const percentage = totalExpected > 0 ? (totalScanned / totalExpected) * 100 : 0;
+                    const isCompleted = conf.endTime !== null;
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-700 p-4 rounded-lg flex justify-between items-center';
+                    let statusHTML = '';
+                    let buttonHTML = '';
+                    let loteHTML = conf.lote ? `<p class="text-sm text-gray-400">Lote: ${conf.lote}</p>` : '';
+                    if (isCompleted) {
+                        completedCount++;
+                        let duration = conf.endTime && conf.startTime ? formatDuration(conf.endTime - conf.startTime) : 'N/A';
+                        let problemsIndicator = conf.problems ? ` <span class="text-yellow-400 font-semibold">(Com Obs.)</span>` : '';
+                        statusHTML = `<span class="px-3 py-1 text-xs font-semibold text-green-900 bg-green-300 rounded-full">CONCLUÍDO (${duration})${problemsIndicator}</span>`;
+                        buttonHTML = `<button data-key="${key}" class="select-conference-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Visualizar</button>`;
+                    } else {
+                        pendingCount++;
+                        let problemsIndicator = conf.problems ? ` <span class="text-yellow-400 font-semibold">(Com Obs.)</span>` : '';
+                        statusHTML = `<p class="text-sm text-gray-400">Progresso: ${totalScanned} de ${totalExpected} volumes ${problemsIndicator}</p>`;
+                        buttonHTML = `<button data-key="${key}" class="select-conference-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Conferir</button>`;
+                    }
+                    card.innerHTML = `
+                        <div class="flex-grow pr-4">
+                            <div class="flex items-center gap-4 mb-2">
+                                 <h3 class="text-xl font-bold text-cyan-300">${key}</h3>
+                                 ${statusHTML}
+                            </div>
+                            ${loteHTML}
+                            <div class="w-full bg-gray-600 rounded-full h-2.5 mt-2">
+                                <div class="${isCompleted ? 'bg-green-500' : 'bg-cyan-500'} h-2.5 rounded-full" style="width: ${Math.min(percentage, 100)}%"></div>
+                            </div>
+                        </div>
+                        ${buttonHTML}`;
+                    if (isCompleted) {
+                        completedConferenceList.appendChild(card);
+                    } else {
+                        conferenceList.appendChild(card);
+                    }
+                });
+                noConferencesMessage.classList.toggle('hidden', pendingCount > 0);
+                noCompletedConferencesMessage.classList.toggle('hidden', completedCount > 0);
+                downloadCsvBtn.disabled = completedCount === 0;
+            }
+
+            function updateProductListView() {
+                productList.innerHTML = '';
+                if (newConferenceProducts.size === 0) {
+                    emptyListMessage.classList.remove('hidden');
+                    saveConferenceBtn.disabled = true;
+                } else {
+                    emptyListMessage.classList.add('hidden');
+                    saveConferenceBtn.disabled = false;
+                    newConferenceProducts.forEach((data, code) => {
+                        const li = document.createElement('li');
+                        li.className = 'flex justify-between items-center bg-gray-700 p-2 rounded-md';
+                        li.innerHTML = `
+                            <span><span class="font-bold text-cyan-300">${code}</span> - ${data.expected} unid.</span>
+                            <button data-code="${code}" class="remove-btn text-red-400 hover:text-red-600">&times;</button>`;
+                        productList.appendChild(li);
+                    });
+                }
+            }
+
+            function parseProductCode(barcode) {
+                if (!barcode) return '';
+                return barcode.split('.')[0].toUpperCase();
+            }
+            
+            async function processBarcode(barcode) {
+                if (!barcode) return;
+                
+                // Check global duplicates in Firestore
+                const barcodeDocRef = doc(allBarcodesColRef, barcode);
+                const barcodeSnap = await getDoc(barcodeDocRef);
+                if (barcodeSnap.exists()) {
+                    logScan(`ERRO: Código '${barcode}' já foi conferido (em outra carga).`, 'error');
+                    return;
+                }
+
+                const conference = conferences.get(activeConferenceKey);
+                if (!conference || conference.endTime !== null) return;
+                
+                const confDocRef = doc(conferencesColRef, activeConferenceKey);
+                
+                // Start timer on first scan
+                if (!conference.startTime) {
+                    await updateDoc(confDocRef, { startTime: serverTimestamp() });
+                }
+                
+                // Add to global barcode list
+                await setDoc(barcodeDocRef, { conferenceId: activeConferenceKey, scannedAt: serverTimestamp() });
+                
+                const productCode = parseProductCode(barcode);
+                
+                const updatePayload = {
+                    [`expectedProducts.${productCode}.scanned`]: increment(1),
+                    scannedBarcodes: conference.scannedBarcodes ? [...conference.scannedBarcodes, barcode] : [barcode]
+                };
+
+                await updateDoc(confDocRef, updatePayload);
+
+                // UI update is now handled by the onSnapshot listener, but we can log immediately
+                const product = conference.expectedProducts.get(productCode);
+                if (product) {
+                     if (product.scanned + 1 <= product.expected) {
+                        logScan(`OK: '${barcode}' (Prod: ${productCode}) conferido.`, 'success');
+                    } else {
+                        logScan(`AVISO: '${barcode}' (Prod: ${productCode}) é um EXCESSO.`, 'warning');
+                    }
+                } else {
+                    logScan(`ERRO: Produto ${productCode} (de '${barcode}') não esperado.`, 'error');
+                }
+                
+                // Check for completion after the update
+                const updatedProduct = conference.expectedProducts.get(productCode);
+                const totalExpected = Array.from(conference.expectedProducts.values()).reduce((sum, p) => sum + p.expected, 0);
+                const totalScanned = Array.from(conference.expectedProducts.values()).reduce((sum, p) => sum + (p.scanned || 0), 0) + (product ? 1 : 0);
+               
+                if (totalExpected > 0 && totalScanned >= totalExpected) {
+                    await updateDoc(confDocRef, { endTime: serverTimestamp() });
+                    logScan(`Conferência CONCLUÍDA! Retornando à lista...`, 'info');
+                    setTimeout(() => {
+                        if (activeConferenceKey) { backToSelectionFromConference.click(); }
+                    }, 2000);
+                }
+            }
+
+            function handleAddProduct(e) {
+                e.preventDefault();
+                const code = productCodeInput.value.trim().toUpperCase();
+                const quantity = parseInt(productQuantityInput.value, 10);
+                if (code && quantity > 0) {
+                    if (newConferenceProducts.has(code)) {
+                        newConferenceProducts.get(code).expected += quantity;
+                    } else {
+                        newConferenceProducts.set(code, { expected: quantity, scanned: 0 });
+                    }
+                    updateProductListView();
+                    addProductForm.reset();
+                    productCodeInput.focus();
+                }
+            }
+
+            function handleRemoveProduct(e) {
+                if (e.target.classList.contains('remove-btn')) {
+                    const code = e.target.dataset.code;
+                    newConferenceProducts.delete(code);
+                    updateProductListView();
+                }
+            }
+            
+            async function handleSaveConference() {
+                const containerNumber = containerNumberInput.value.trim().toUpperCase();
+                const loteNumber = loteNumberInput.value.trim().toUpperCase();
+                if (!containerNumber) {
+                    alert('Por favor, informe o número do container.'); return;
+                }
+                const docRef = doc(conferencesColRef, containerNumber);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                     alert('Já existe uma conferência cadastrada para este container.'); return;
+                }
+                if (newConferenceProducts.size === 0) {
+                    alert('Adicione pelo menos um produto.'); return;
+                }
+                
+                const conferenceData = {
+                    lote: loteNumber,
+                    expectedProducts: Object.fromEntries(newConferenceProducts),
+                    scannedBarcodes: [],
+                    log: [],
+                    startTime: null,
+                    endTime: null,
+                    problems: ''
+                };
+
+                await setDoc(docRef, conferenceData);
+
+                showScreen(selectionSection);
+            }
+
+            function handleSelectConference(e) {
+                if (e.target.classList.contains('select-conference-btn')) {
+                    activeConferenceKey = e.target.dataset.key;
+                    const conference = conferences.get(activeConferenceKey);
+                    const isCompleted = conference.endTime !== null;
+
+                    displayContainerNumber.textContent = activeConferenceKey;
+                    displayLoteNumber.textContent = conference.lote || 'N/A';
+                    scanLog.innerHTML = '';
+                    conference.log.forEach(item => logScan(item.message, item.type, false));
+                    updateDashboard();
+                    updateSummaryTable();
+                    
+                    clearInterval(elapsedTimerInterval);
+                    if (conference.startTime && !conference.endTime) {
+                        startElapsedTimer();
+                    } else if (conference.endTime) {
+                        elapsedTimeEl.textContent = formatDuration(conference.endTime - conference.startTime);
+                    } else {
+                        elapsedTimeEl.textContent = '--:--:--';
+                    }
+
+                    manualFinalizeBtn.classList.toggle('hidden', isCompleted);
+                    registerProblemBtn.classList.remove('hidden');
+
+                    if (conference.problems) {
+                        problemsDisplaySection.classList.remove('hidden');
+                        problemsDisplayText.textContent = conference.problems;
+                    } else {
+                        problemsDisplaySection.classList.add('hidden');
+                    }
+
+                    scanInput.disabled = isCompleted;
+                    manualInput.disabled = isCompleted;
+                    scanInput.placeholder = isCompleted ? 'Conferência concluída' : 'Aguardando leitura do scanner...';
+                    manualInput.placeholder = isCompleted ? 'Conferência concluída' : 'Digite o código completo...';
+                    
+                    showScreen(conferenceSection);
+                    if (!isCompleted) {
+                        scanInput.focus();
+                    }
+                }
+            }
+
+            function formatDuration(ms) {
+                if (!ms || ms < 0) ms = 0;
+                const totalSeconds = Math.floor(ms / 1000);
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
+
+            function startElapsedTimer() {
+                clearInterval(elapsedTimerInterval);
+                const conference = conferences.get(activeConferenceKey);
+                if (!conference || !conference.startTime) return;
+                elapsedTimerInterval = setInterval(() => {
+                    const now = conference.endTime || Date.now();
+                    elapsedTimeEl.textContent = formatDuration(now - conference.startTime);
+                }, 1000);
+            }
+
+            function updateDashboard() {
+                const conference = conferences.get(activeConferenceKey);
+                if (!conference) return;
+                const totalExpected = Array.from(conference.expectedProducts.values()).reduce((sum, p) => sum + p.expected, 0);
+                const totalScanned = Array.from(conference.expectedProducts.values()).reduce((sum, p) => sum + (p.scanned || 0), 0);
+                const remaining = Math.max(0, totalExpected - totalScanned);
+                const percentage = totalExpected > 0 ? (totalScanned / totalExpected) * 100 : 0;
+                scannedCount.textContent = totalScanned;
+                totalCount.textContent = totalExpected;
+                remainingCount.textContent = remaining;
+                progressPercentage.textContent = `${percentage.toFixed(0)}%`;
+                containerFill.style.height = `${Math.min(percentage, 100)}%`;
+            }
+
+            function updateSummaryTable() {
+                const conference = conferences.get(activeConferenceKey);
+                if (!conference) return;
+                summaryTableBody.innerHTML = '';
+                conference.expectedProducts.forEach((data, code) => {
+                    const row = document.createElement('tr');
+                    const scanned = data.scanned || 0;
+                    const progress = data.expected > 0 ? (scanned / data.expected) * 100 : 0;
+                    const remaining = Math.max(0, data.expected - scanned);
+                    let statusHtml;
+                    if (scanned === 0) statusHtml = `<span class="text-gray-400">Pendente</span>`;
+                    else if (scanned < data.expected) statusHtml = `<span class="text-yellow-400">Em Andamento</span>`;
+                    else if (scanned === data.expected) statusHtml = `<span class="text-green-400">Concluído</span>`;
+                    else statusHtml = `<span class="text-red-400">Excesso</span>`;
+                    row.innerHTML = `
+                        <td class="p-2 font-bold">${code}</td>
+                        <td class="p-2 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                               <span>${scanned} / ${data.expected}</span>
+                               <div class="w-16 bg-gray-600 rounded-full h-2.5"><div class="bg-cyan-500 h-2.5 rounded-full" style="width: ${Math.min(progress, 100)}%"></div></div>
+                            </div>
+                        </td>
+                        <td class="p-2 text-center font-bold text-yellow-400">${remaining}</td>
+                        <td class="p-2 text-right">${statusHtml}</td>`;
+                    summaryTableBody.appendChild(row);
+                });
+            }
+
+            function logScan(message, type = 'info', saveToState = true) {
+                const colors = { success: 'text-green-400', warning: 'text-yellow-400', error: 'text-red-400', info: 'text-gray-400' };
+                const li = document.createElement('li');
+                li.className = `p-1 ${colors[type]}`;
+                const time = new Date().toLocaleTimeString();
+                li.innerHTML = `<span class="text-xs text-gray-500 mr-2">[${time}]</span> ${message}`;
+                scanLog.appendChild(li);
+                if (saveToState && activeConferenceKey) {
+                    const conference = conferences.get(activeConferenceKey);
+                    if(!conference.log) conference.log = [];
+                    conference.log.push({ message, type });
+                    if (conference.log.length > 50) conference.log.shift();
+                }
+            }
+            
+            function openProblemsModal(isFinalizing) {
+                isModalFinalizing = isFinalizing;
+                const conference = conferences.get(activeConferenceKey);
+                problemsTextarea.value = conference.problems || '';
+
+                if (isFinalizing) {
+                    modalTitle.textContent = 'Finalizar Conferência com Observações';
+                    modalDescription.textContent = 'Use este campo para registrar problemas como itens faltantes, trocados ou danificados antes de encerrar a conferência.';
+                    confirmModalBtn.textContent = 'Confirmar Finalização';
+                    confirmModalBtn.className = 'font-bold py-2 px-4 rounded-md transition duration-300 bg-red-600 hover:bg-red-700 text-white';
+                } else {
+                    modalTitle.textContent = 'Registrar Ocorrência';
+                    modalDescription.textContent = 'Descreva qualquer problema encontrado durante a conferência (ex: item quebrado, caixa avariada).';
+                    confirmModalBtn.textContent = 'Salvar Ocorrência';
+                    confirmModalBtn.className = 'font-bold py-2 px-4 rounded-md transition duration-300 bg-amber-600 hover:bg-amber-700 text-white';
+                }
+                problemsModal.classList.remove('hidden');
+                problemsTextarea.focus();
+            }
+            
+            async function handleConfirmModal() {
+                 const conference = conferences.get(activeConferenceKey);
+                if (conference) {
+                    const confDocRef = doc(conferencesColRef, activeConferenceKey);
+                    const problemsText = problemsTextarea.value.trim();
+                    
+                    if (isModalFinalizing) {
+                        const updateData = { problems: problemsText, endTime: serverTimestamp() };
+                        if(!conference.startTime) {
+                            updateData.startTime = serverTimestamp();
+                        }
+                        await updateDoc(confDocRef, updateData);
+                        logScan(`Conferência finalizada manualmente.`, 'warning');
+                        setTimeout(() => { backToSelectionFromConference.click(); }, 1500);
+                    } else {
+                        await updateDoc(confDocRef, { problems: problemsText });
+                        logScan('Ocorrência registrada.', 'warning');
+                    }
+                    problemsModal.classList.add('hidden');
+                }
+            }
+
+            function downloadCSVReport() {
+                const conferenceEntries = Array.from(conferences.entries()).filter(([key, conf]) => conf.endTime !== null);
+
+                if (conferenceEntries.length === 0) {
+                    alert('Nenhuma conferência concluída para gerar o relatório.');
+                    return;
+                }
+
+                const header = ["N° do lote", "Container", "Tempo descarga", "Observações"];
+                
+                const rows = conferenceEntries.map(([key, conf]) => {
+                    const lote = conf.lote || '';
+                    const tempo = (conf.endTime && conf.startTime) ? formatDuration(conf.endTime - conf.startTime) : 'N/A';
+                    let observacoes = conf.problems || '';
+                    observacoes = `"${observacoes.replace(/"/g, '""')}"`;
+                    return [lote, key, tempo, observacoes].join(',');
+                });
+
+                const csvContent = "data:text/csv;charset=utf-8," + header.join(',') + '\r\n' + rows.join('\r\n');
+                
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", "relatorio_conferencias.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            // --- EVENT LISTENERS ---
+            createNewBtn.addEventListener('click', () => {
+                containerNumberInput.value = '';
+                loteNumberInput.value = '';
+                addProductForm.reset();
+                newConferenceProducts.clear();
+                updateProductListView();
+                showScreen(setupSection);
+                containerNumberInput.focus();
+            });
+            backToSelectionFromSetup.addEventListener('click', () => showScreen(selectionSection));
+            backToSelectionFromConference.addEventListener('click', () => {
+                clearInterval(elapsedTimerInterval);
+                activeConferenceKey = null;
+                showScreen(selectionSection); // onSnapshot will update the view
+            });
+            addProductForm.addEventListener('submit', handleAddProduct);
+            productList.addEventListener('click', handleRemoveProduct);
+            saveConferenceBtn.addEventListener('click', handleSaveConference);
+            conferenceList.addEventListener('click', handleSelectConference);
+            completedConferenceList.addEventListener('click', handleSelectConference);
+            scanInput.addEventListener('input', () => {
+                clearTimeout(scanTimer);
+                if (scanInput.value) {
+                    scanTimer = setTimeout(() => {
+                        processBarcode(scanInput.value.trim());
+                        scanInput.value = '';
+                        scanInput.focus();
+                    }, 150);
+                }
+            });
+            scanForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                clearTimeout(scanTimer);
+                processBarcode(scanInput.value.trim());
+                scanInput.value = '';
+                scanInput.focus();
+            });
+            manualScanForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                processBarcode(manualInput.value.trim());
+                manualInput.value = '';
+                manualInput.focus();
+            });
+            
+            registerProblemBtn.addEventListener('click', () => openProblemsModal(false));
+            manualFinalizeBtn.addEventListener('click', () => openProblemsModal(true));
+            cancelModalBtn.addEventListener('click', () => problemsModal.classList.add('hidden'));
+            confirmModalBtn.addEventListener('click', handleConfirmModal);
+            tabPending.addEventListener('click', () => switchTab('pending'));
+            tabCompleted.addEventListener('click', () => switchTab('completed'));
+            downloadCsvBtn.addEventListener('click', downloadCSVReport);
+            
+            // Inicialização
+            showScreen(selectionSection);
+        }
+        
+        main().catch(error => {
+            console.error("Erro na inicialização:", error);
+            const loadingScreen = document.getElementById('loading-screen');
+            loadingScreen.innerHTML = `<p class="text-lg text-red-400">Falha ao conectar ao banco de dados. Verifique o console para mais detalhes.</p>`;
+        });
+    </script>
+</body>
+</html>
+
