@@ -446,19 +446,25 @@
                     const card = document.createElement('div');
                     card.className = 'bg-gray-700 p-4 rounded-lg flex justify-between items-center';
                     let statusHTML = '';
-                    let buttonHTML = '';
+                    let actionsHTML = '';
                     let loteHTML = conf.lote ? `<p class="text-sm text-gray-400">Lote: ${conf.lote}</p>` : '';
                     if (isCompleted) {
                         completedCount++;
                         let duration = conf.endTime && conf.startTime ? formatDuration(conf.endTime - conf.startTime) : 'N/A';
                         let problemsIndicator = conf.problems ? ` <span class="text-yellow-400 font-semibold">(Com Obs.)</span>` : '';
                         statusHTML = `<span class="px-3 py-1 text-xs font-semibold text-green-900 bg-green-300 rounded-full">CONCLUÍDO (${duration})${problemsIndicator}</span>`;
-                        buttonHTML = `<button data-key="${key}" class="select-conference-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Visualizar</button>`;
+                        actionsHTML = `<button data-key="${key}" class="select-conference-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Visualizar</button>`;
                     } else {
                         pendingCount++;
                         let problemsIndicator = conf.problems ? ` <span class="text-yellow-400 font-semibold">(Com Obs.)</span>` : '';
                         statusHTML = `<p class="text-sm text-gray-400">Progresso: ${totalScanned} de ${totalExpected} volumes ${problemsIndicator}</p>`;
-                        buttonHTML = `<button data-key="${key}" class="select-conference-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Conferir</button>`;
+                        actionsHTML = `
+                            <button data-key="${key}" class="select-conference-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Conferir</button>
+                            <button data-key="${key}" class="delete-conference-btn p-2 rounded-md bg-gray-600 hover:bg-red-700 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
+                                </svg>
+                            </button>`;
                     }
                     card.innerHTML = `
                         <div class="flex-grow pr-4">
@@ -472,12 +478,7 @@
                             </div>
                         </div>
                         <div class="flex gap-2 items-center">
-                            ${buttonHTML}
-                            <button data-key="${key}" class="delete-conference-btn p-2 rounded-md bg-gray-600 hover:bg-red-700 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
-                                </svg>
-                            </button>
+                            ${actionsHTML}
                         </div>`;
                     if (isCompleted) {
                         completedConferenceList.appendChild(card);
