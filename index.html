@@ -363,6 +363,12 @@
                 });
                 conferences = serverConferences;
                 updateSelectionView();
+                
+                // If we are currently viewing a conference, refresh its UI
+                if (activeConferenceKey && conferences.has(activeConferenceKey)) {
+                    updateDashboard();
+                    updateSummaryTable();
+                }
             });
 
 
@@ -402,7 +408,7 @@
                 }
                 conferences.forEach((conf, key) => {
                     const totalExpected = Array.from(conf.expectedProducts.values()).reduce((sum, p) => sum + p.expected, 0);
-                    const totalScanned = Array.from(conf.expectedProducts.values()).reduce((sum, p) => sum + p.scanned, 0);
+                    const totalScanned = Array.from(conf.expectedProducts.values()).reduce((sum, p) => sum + (p.scanned || 0), 0);
                     const percentage = totalExpected > 0 ? (totalScanned / totalExpected) * 100 : 0;
                     const isCompleted = conf.endTime !== null;
                     const card = document.createElement('div');
@@ -472,7 +478,6 @@
             async function processBarcode(barcode) {
                 if (!barcode) return;
                 
-                // Check global duplicates in Firestore
                 const barcodeDocRef = doc(allBarcodesColRef, barcode);
                 const barcodeSnap = await getDoc(barcodeDocRef);
                 if (barcodeSnap.exists()) {
@@ -485,47 +490,21 @@
                 
                 const confDocRef = doc(conferencesColRef, activeConferenceKey);
                 
-                // Start timer on first scan
                 if (!conference.startTime) {
                     await updateDoc(confDocRef, { startTime: serverTimestamp() });
                 }
                 
-                // Add to global barcode list
                 await setDoc(barcodeDocRef, { conferenceId: activeConferenceKey, scannedAt: serverTimestamp() });
                 
                 const productCode = parseProductCode(barcode);
                 
                 const updatePayload = {
                     [`expectedProducts.${productCode}.scanned`]: increment(1),
-                    scannedBarcodes: conference.scannedBarcodes ? [...conference.scannedBarcodes, barcode] : [barcode]
+                    scannedBarcodes: [...conference.scannedBarcodes, barcode]
                 };
 
                 await updateDoc(confDocRef, updatePayload);
-
-                // UI update is now handled by the onSnapshot listener, but we can log immediately
-                const product = conference.expectedProducts.get(productCode);
-                if (product) {
-                     if (product.scanned + 1 <= product.expected) {
-                        logScan(`OK: '${barcode}' (Prod: ${productCode}) conferido.`, 'success');
-                    } else {
-                        logScan(`AVISO: '${barcode}' (Prod: ${productCode}) é um EXCESSO.`, 'warning');
-                    }
-                } else {
-                    logScan(`ERRO: Produto ${productCode} (de '${barcode}') não esperado.`, 'error');
-                }
-                
-                // Check for completion after the update
-                const updatedProduct = conference.expectedProducts.get(productCode);
-                const totalExpected = Array.from(conference.expectedProducts.values()).reduce((sum, p) => sum + p.expected, 0);
-                const totalScanned = Array.from(conference.expectedProducts.values()).reduce((sum, p) => sum + (p.scanned || 0), 0) + (product ? 1 : 0);
-               
-                if (totalExpected > 0 && totalScanned >= totalExpected) {
-                    await updateDoc(confDocRef, { endTime: serverTimestamp() });
-                    logScan(`Conferência CONCLUÍDA! Retornando à lista...`, 'info');
-                    setTimeout(() => {
-                        if (activeConferenceKey) { backToSelectionFromConference.click(); }
-                    }, 2000);
-                }
+                // The onSnapshot listener will handle all UI updates from now on
             }
 
             function handleAddProduct(e) {
@@ -591,7 +570,7 @@
                     displayContainerNumber.textContent = activeConferenceKey;
                     displayLoteNumber.textContent = conference.lote || 'N/A';
                     scanLog.innerHTML = '';
-                    conference.log.forEach(item => logScan(item.message, item.type, false));
+                    (conference.log || []).forEach(item => logScan(item.message, item.type, false));
                     updateDashboard();
                     updateSummaryTable();
                     
@@ -687,19 +666,13 @@
                 });
             }
 
-            function logScan(message, type = 'info', saveToState = true) {
+            function logScan(message, type = 'info', saveToState = false) { // Turned off saveToState to avoid local log
                 const colors = { success: 'text-green-400', warning: 'text-yellow-400', error: 'text-red-400', info: 'text-gray-400' };
                 const li = document.createElement('li');
                 li.className = `p-1 ${colors[type]}`;
                 const time = new Date().toLocaleTimeString();
                 li.innerHTML = `<span class="text-xs text-gray-500 mr-2">[${time}]</span> ${message}`;
                 scanLog.appendChild(li);
-                if (saveToState && activeConferenceKey) {
-                    const conference = conferences.get(activeConferenceKey);
-                    if(!conference.log) conference.log = [];
-                    conference.log.push({ message, type });
-                    if (conference.log.length > 50) conference.log.shift();
-                }
             }
             
             function openProblemsModal(isFinalizing) {
