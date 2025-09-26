@@ -807,7 +807,7 @@
                 };
 
                 const currentLog = conference.log || [];
-                const updatedLog = [...currentLog, newLogEntry].slice(-50); // Keep last 50 entries
+                const updatedLog = [...currentLog, newLogEntry];
 
                 try {
                     await updateDoc(confDocRef, { log: updatedLog });
@@ -998,6 +998,4 @@
     </script>
 </body>
 </html>
-
-
 
