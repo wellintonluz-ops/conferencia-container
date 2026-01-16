@@ -84,19 +84,46 @@
                     <button id="tab-completed" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500">
                         Concluídas
                     </button>
+                    <button id="tab-dashboard" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500">
+                        Dashboard
+                    </button>
                 </nav>
             </div>
 
             <!-- Conteúdo das Abas -->
             <div id="pending-tab-content">
-                <div id="conference-list" class="space-y-3 max-h-96 overflow-y-auto">
+                <div id="conference-list" class="space-y-3 max-h-[40rem] overflow-y-auto">
                     <p id="no-conferences-message" class="text-gray-500 text-center py-4">Nenhuma conferência pendente.</p>
                 </div>
             </div>
 
             <div id="completed-tab-content" class="hidden">
-                <div id="completed-conference-list" class="space-y-3 max-h-96 overflow-y-auto">
+                <div class="flex justify-end mb-3">
+                    <input id="completed-search" type="text" class="w-full md:w-96 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Pesquisar por container ou lote..." />
+                </div>
+                <div id="completed-conference-list" class="space-y-3 max-h-[40rem] overflow-y-auto">
                      <p id="no-completed-conferences-message" class="text-gray-500 text-center py-4">Nenhuma conferência concluída.</p>
+                </div>
+            </div>
+
+            <div id="dashboard-tab-content" class="hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 flex flex-col items-center text-center">
+                        <h3 class="text-lg font-semibold mb-2">Média de tempo (últimos 5)</h3>
+                        <p id="avg-time-last-5" class="text-3xl font-bold text-cyan-300">--:--:--</p>
+                        <p class="text-sm text-gray-400 mt-1">Considera containers concluídos mais recentes com início e fim registrados.</p>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                        <h3 class="text-lg font-semibold mb-2">Últimos 5 concluídos</h3>
+                        <div id="last-5-header" class="hidden md:grid grid-cols-3 text-xs text-gray-400 uppercase tracking-wide pb-1 border-b border-gray-700 mb-2">
+                            <span>Container</span>
+                            <span>Duração</span>
+                            <span>Finalizado em</span>
+                        </div>
+                        <ul id="last-5-list" class="space-y-2 text-gray-200 text-sm">
+                            <li class="text-gray-500">Nenhum concluído ainda.</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -110,7 +137,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                     <label for="container-number" class="block text-sm font-medium text-gray-300 mb-1">Nº do Container</label>
-                    <input type="text" id="container-number" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none uppercase" oninput="this.value = this.value.toUpperCase()" placeholder="Ex: MSKU1234567">
+                    <input type="text" id="container-number" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none uppercase" minlength="11" maxlength="13" oninput="this.value = this.value.toUpperCase().replace(/\s+/g, '').slice(0, 13)" placeholder="Ex: MSKU1234567">
                 </div>
                 <div>
                     <label for="lote-number" class="block text-sm font-medium text-gray-300 mb-1">Lote</label>
@@ -329,6 +356,7 @@
             let elapsedTimerInterval = null;
             let isModalFinalizing = false;
             let keyToDelete = null;
+            let completedSearchTerm = '';
 
 
             // --- DOM Elements ---
@@ -341,10 +369,16 @@
             const noConferencesMessage = document.getElementById('no-conferences-message');
             const tabPending = document.getElementById('tab-pending');
             const tabCompleted = document.getElementById('tab-completed');
+            const tabDashboard = document.getElementById('tab-dashboard');
             const pendingTabContent = document.getElementById('pending-tab-content');
             const completedTabContent = document.getElementById('completed-tab-content');
+            const dashboardTabContent = document.getElementById('dashboard-tab-content');
             const completedConferenceList = document.getElementById('completed-conference-list');
             const noCompletedConferencesMessage = document.getElementById('no-completed-conferences-message');
+            const completedSearchInput = document.getElementById('completed-search');
+            const avgTimeLast5El = document.getElementById('avg-time-last-5');
+            const last5ListEl = document.getElementById('last-5-list');
+            const last5HeaderEl = document.getElementById('last-5-header');
             const backToSelectionFromSetup = document.getElementById('back-to-selection-from-setup');
             const containerNumberInput = document.getElementById('container-number');
             const loteNumberInput = document.getElementById('lote-number');
@@ -434,21 +468,20 @@
             }
 
             function switchTab(activeTab) {
-                if (activeTab === 'pending') {
-                    tabPending.classList.add('border-cyan-500', 'text-cyan-400');
-                    tabPending.classList.remove('border-transparent', 'text-gray-400');
-                    tabCompleted.classList.add('border-transparent', 'text-gray-400');
-                    tabCompleted.classList.remove('border-cyan-500', 'text-cyan-400');
-                    pendingTabContent.classList.remove('hidden');
-                    completedTabContent.classList.add('hidden');
-                } else {
-                    tabCompleted.classList.add('border-cyan-500', 'text-cyan-400');
-                    tabCompleted.classList.remove('border-transparent', 'text-gray-400');
-                    tabPending.classList.add('border-transparent', 'text-gray-400');
-                    tabPending.classList.remove('border-cyan-500', 'text-cyan-400');
-                    completedTabContent.classList.remove('hidden');
-                    pendingTabContent.classList.add('hidden');
-                }
+                const tabs = [
+                    { btn: tabPending, panel: pendingTabContent },
+                    { btn: tabCompleted, panel: completedTabContent },
+                    { btn: tabDashboard, panel: dashboardTabContent }
+                ];
+
+                tabs.forEach(({ btn, panel }) => {
+                    const isActive = btn === (activeTab === 'pending' ? tabPending : activeTab === 'completed' ? tabCompleted : tabDashboard);
+                    btn.classList.toggle('border-cyan-500', isActive);
+                    btn.classList.toggle('text-cyan-400', isActive);
+                    btn.classList.toggle('border-transparent', !isActive);
+                    btn.classList.toggle('text-gray-400', !isActive);
+                    panel.classList.toggle('hidden', !isActive);
+                });
             }
             
             function updateSelectionView() {
@@ -456,28 +489,37 @@
                 completedConferenceList.innerHTML = '';
                 let pendingCount = 0;
                 let completedCount = 0;
+                let completedVisibleCount = 0;
+                const searchTerm = completedSearchTerm.trim().toLowerCase();
+
                 if (conferences.size === 0) {
                     noConferencesMessage.classList.remove('hidden');
                     noCompletedConferencesMessage.classList.remove('hidden');
                 }
-                conferences.forEach((conf, key) => {
+
+                const entries = Array.from(conferences.entries());
+                const pendingEntries = entries.filter(([_, conf]) => conf.endTime === null);
+                const completedEntries = entries
+                    .filter(([_, conf]) => conf.endTime !== null)
+                    .sort((a, b) => (b[1].endTime || 0) - (a[1].endTime || 0));
+
+                const renderCard = (key, conf, isCompleted) => {
                     const totalExpected = Array.from(conf.expectedProducts.values()).reduce((sum, p) => sum + p.expected, 0);
                     const totalScanned = Array.from(conf.expectedProducts.values()).reduce((sum, p) => sum + (p.scanned || 0), 0);
                     const percentage = totalExpected > 0 ? (totalScanned / totalExpected) * 100 : 0;
-                    const isCompleted = conf.endTime !== null;
                     const card = document.createElement('div');
                     card.className = 'bg-gray-700 p-4 rounded-lg flex justify-between items-center';
                     let statusHTML = '';
                     let actionsHTML = '';
                     let loteHTML = conf.lote ? `<p class="text-sm text-gray-400">Lote: ${conf.lote}</p>` : '';
+                    let completedDateHTML = '';
                     if (isCompleted) {
-                        completedCount++;
                         let duration = conf.endTime && conf.startTime ? formatDuration(conf.endTime - conf.startTime) : 'N/A';
                         let problemsIndicator = conf.problems ? ` <span class="text-yellow-400 font-semibold">(Com Obs.)</span>` : '';
                         statusHTML = `<span class="px-3 py-1 text-xs font-semibold text-green-900 bg-green-300 rounded-full">CONCLUÍDO (${duration})${problemsIndicator}</span>`;
                         actionsHTML = `<button data-key="${key}" class="select-conference-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">Visualizar</button>`;
+                        completedDateHTML = conf.endTime ? `<p class="text-sm text-gray-400">Concluído: ${formatDateTime(conf.endTime)}</p>` : '';
                     } else {
-                        pendingCount++;
                         let problemsIndicator = conf.problems ? ` <span class="text-yellow-400 font-semibold">(Com Obs.)</span>` : '';
                         statusHTML = `<p class="text-sm text-gray-400">Progresso: ${totalScanned} de ${totalExpected} volumes ${problemsIndicator}</p>`;
                         actionsHTML = `
@@ -488,6 +530,7 @@
                                 </svg>
                             </button>`;
                     }
+
                     card.innerHTML = `
                         <div class="flex-grow pr-4">
                             <div class="flex items-center gap-4 mb-2">
@@ -495,6 +538,7 @@
                                  ${statusHTML}
                             </div>
                             ${loteHTML}
+                            ${completedDateHTML}
                             <div class="w-full bg-gray-600 rounded-full h-2.5 mt-2">
                                 <div class="${isCompleted ? 'bg-green-500' : 'bg-cyan-500'} h-2.5 rounded-full" style="width: ${Math.min(percentage, 100)}%"></div>
                             </div>
@@ -502,15 +546,66 @@
                         <div class="flex gap-2 items-center">
                             ${actionsHTML}
                         </div>`;
+
                     if (isCompleted) {
                         completedConferenceList.appendChild(card);
                     } else {
                         conferenceList.appendChild(card);
                     }
+                };
+
+                pendingEntries.forEach(([key, conf]) => {
+                    pendingCount++;
+                    renderCard(key, conf, false);
                 });
+
+                completedEntries.forEach(([key, conf]) => {
+                    completedCount++;
+                    const keyMatch = key.toLowerCase().includes(searchTerm);
+                    const loteMatch = (conf.lote || '').toLowerCase().includes(searchTerm);
+                    const matchesFilter = !searchTerm || keyMatch || loteMatch;
+                    if (!matchesFilter) { return; }
+                    completedVisibleCount++;
+                    renderCard(key, conf, true);
+                });
+
                 noConferencesMessage.classList.toggle('hidden', pendingCount > 0);
-                noCompletedConferencesMessage.classList.toggle('hidden', completedCount > 0);
+                noCompletedConferencesMessage.classList.toggle('hidden', completedVisibleCount > 0);
                 downloadCsvBtn.disabled = completedCount === 0;
+
+                // Dashboard metrics: average duration of last 5 completed
+                const lastFive = completedEntries.slice(0, 5).map(([key, conf]) => ({ key, conf }));
+                const durations = lastFive
+                    .map(item => (item.conf.endTime && item.conf.startTime) ? (item.conf.endTime - item.conf.startTime) : null)
+                    .filter(ms => ms !== null && ms >= 0);
+                if (durations.length > 0) {
+                    const avgMs = durations.reduce((a, b) => a + b, 0) / durations.length;
+                    avgTimeLast5El.textContent = formatDuration(avgMs);
+                } else {
+                    avgTimeLast5El.textContent = '--:--:--';
+                }
+
+                last5ListEl.innerHTML = '';
+                if (lastFive.length === 0) {
+                    last5HeaderEl.classList.add('hidden');
+                    const li = document.createElement('li');
+                    li.className = 'text-gray-500';
+                    li.textContent = 'Nenhum concluído ainda.';
+                    last5ListEl.appendChild(li);
+                } else {
+                    last5HeaderEl.classList.remove('hidden');
+                    lastFive.forEach(({ key, conf }) => {
+                        const li = document.createElement('li');
+                        const durationText = (conf.endTime && conf.startTime) ? formatDuration(conf.endTime - conf.startTime) : 'N/A';
+                        const finishedAt = conf.endTime ? formatDateTime(conf.endTime) : 'Sem fim';
+                        li.className = 'grid grid-cols-1 md:grid-cols-3 md:items-center gap-1 md:gap-3';
+                        li.innerHTML = `
+                            <span class="font-semibold text-cyan-300">${key}</span>
+                            <span class="text-gray-100">${durationText}</span>
+                            <span class="text-gray-300">${finishedAt}</span>`;
+                        last5ListEl.appendChild(li);
+                    });
+                }
             }
 
             function updateProductListView() {
@@ -539,30 +634,38 @@
             
             async function processBarcode(barcode) {
                 if (!barcode) return;
-                
-                const barcodeDocRef = doc(allBarcodesColRef, barcode);
+
+                const cleanedBarcode = barcode.trim().toUpperCase();
+                const formatOk = /^[^.\s]+\.[^.\s]+\.[^.\s]+$/.test(cleanedBarcode);
+                if (!formatOk) {
+                    await addLogEntry(`ERRO: Formato inválido '${barcode}'. Use modelo VAB0004-C.N8959.10`, 'error');
+                    showErrorAlert(`Formato inválido. Use o padrão EX: VAB0004-C.N8959.10 (três blocos separados por pontos, sem espaços).`);
+                    return;
+                }
+
+                const barcodeDocRef = doc(allBarcodesColRef, cleanedBarcode);
                 const barcodeSnap = await getDoc(barcodeDocRef);
                 if (barcodeSnap.exists()) {
-                    await addLogEntry(`ERRO: Código '${barcode}' já foi conferido.`, 'error');
-                    showErrorAlert(`O código de barras '${barcode}' já foi lido e registrado anteriormente.`);
+                    await addLogEntry(`ERRO: Código '${cleanedBarcode}' já foi conferido.`, 'error');
+                    showErrorAlert(`O código de barras '${cleanedBarcode}' já foi lido e registrado anteriormente.`);
                     return;
                 }
 
                 const conference = conferences.get(activeConferenceKey);
                 if (!conference || conference.endTime !== null) return;
                 
-                const productCode = parseProductCode(barcode);
+                const productCode = parseProductCode(cleanedBarcode);
                 
                 if (!conference.expectedProducts.has(productCode)) {
                     await addLogEntry(`ERRO: Produto ${productCode} não esperado.`, 'error');
-                    showErrorAlert(`Produto '${productCode}' (do código '${barcode}') não está na lista de itens esperados.`);
+                    showErrorAlert(`Produto '${productCode}' (do código '${cleanedBarcode}') não está na lista de itens esperados.`);
                     return;
                 }
 
                 const product = conference.expectedProducts.get(productCode);
                 if ((product.scanned || 0) >= product.expected) {
                     await addLogEntry(`ERRO: Todos os volumes de '${productCode}' já foram conferidos.`, 'error');
-                    showErrorAlert(`Todos os ${product.expected} volumes do produto '${productCode}' já foram conferidos. Leitura de '${barcode}' ignorada.`);
+                    showErrorAlert(`Todos os ${product.expected} volumes do produto '${productCode}' já foram conferidos. Leitura de '${cleanedBarcode}' ignorada.`);
                     return;
                 }
 
@@ -576,10 +679,10 @@
                 
                 const updatePayload = {
                     [`expectedProducts.${productCode}.scanned`]: increment(1),
-                    scannedBarcodes: [...conference.scannedBarcodes, barcode]
+                    scannedBarcodes: [...conference.scannedBarcodes, cleanedBarcode]
                 };
 
-                await addLogEntry(`${barcode}`, 'success');
+                await addLogEntry(`${cleanedBarcode}`, 'success');
                 await updateDoc(confDocRef, updatePayload);
             }
 
@@ -608,10 +711,16 @@
             }
             
             async function handleSaveConference() {
-                const containerNumber = containerNumberInput.value.trim().toUpperCase();
+                const containerNumber = containerNumberInput.value.toUpperCase().replace(/\s+/g, '');
                 const loteNumber = loteNumberInput.value.trim().toUpperCase();
+                containerNumberInput.value = containerNumber;
                 if (!containerNumber) {
                     alert('Por favor, informe o número do container.'); return;
+                }
+                if (containerNumber.length < 11 || containerNumber.length > 13) {
+                    alert('O número do container deve ter entre 11 e 13 caracteres (sem espaços).');
+                    containerNumberInput.focus();
+                    return;
                 }
                 const docRef = doc(conferencesColRef, containerNumber);
                 const docSnap = await getDoc(docRef);
@@ -711,6 +820,14 @@
                 const minutes = Math.floor((totalSeconds % 3600) / 60);
                 const seconds = totalSeconds % 60;
                 return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
+
+            function formatDateTime(timestamp) {
+                if (!timestamp) return '--/--/---- --:--:--';
+                return new Intl.DateTimeFormat('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                }).format(new Date(timestamp));
             }
 
             function startElapsedTimer() {
@@ -947,6 +1064,10 @@
                 handleSelectConference(e);
                 handleDeleteClick(e);
             });
+            completedSearchInput.addEventListener('input', () => {
+                completedSearchTerm = completedSearchInput.value;
+                updateSelectionView();
+            });
 
             scanInput.addEventListener('input', () => {
                 clearTimeout(scanTimer);
@@ -984,6 +1105,7 @@
 
             tabPending.addEventListener('click', () => switchTab('pending'));
             tabCompleted.addEventListener('click', () => switchTab('completed'));
+            tabDashboard.addEventListener('click', () => switchTab('dashboard'));
             downloadCsvBtn.addEventListener('click', downloadCSVReport);
             
             // Inicialização
