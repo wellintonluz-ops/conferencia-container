@@ -304,6 +304,7 @@
             setDoc, 
             getDoc,
             updateDoc, 
+            runTransaction,
             onSnapshot,
             serverTimestamp,
             increment,
@@ -643,47 +644,72 @@
                     return;
                 }
 
-                const barcodeDocRef = doc(allBarcodesColRef, cleanedBarcode);
-                const barcodeSnap = await getDoc(barcodeDocRef);
-                if (barcodeSnap.exists()) {
-                    await addLogEntry(`ERRO: Código '${cleanedBarcode}' já foi conferido.`, 'error');
-                    showErrorAlert(`O código de barras '${cleanedBarcode}' já foi lido e registrado anteriormente.`);
-                    return;
-                }
-
-                const conference = conferences.get(activeConferenceKey);
-                if (!conference || conference.endTime !== null) return;
-                
                 const productCode = parseProductCode(cleanedBarcode);
-                
-                if (!conference.expectedProducts.has(productCode)) {
-                    await addLogEntry(`ERRO: Produto ${productCode} não esperado.`, 'error');
-                    showErrorAlert(`Produto '${productCode}' (do código '${cleanedBarcode}') não está na lista de itens esperados.`);
-                    return;
-                }
-
-                const product = conference.expectedProducts.get(productCode);
-                if ((product.scanned || 0) >= product.expected) {
-                    await addLogEntry(`ERRO: Todos os volumes de '${productCode}' já foram conferidos.`, 'error');
-                    showErrorAlert(`Todos os ${product.expected} volumes do produto '${productCode}' já foram conferidos. Leitura de '${cleanedBarcode}' ignorada.`);
-                    return;
-                }
-
                 const confDocRef = doc(conferencesColRef, activeConferenceKey);
-                
-                if (!conference.startTime) {
-                    await updateDoc(confDocRef, { startTime: serverTimestamp() });
-                }
-                
-                await setDoc(barcodeDocRef, { conferenceId: activeConferenceKey, scannedAt: serverTimestamp() });
-                
-                const updatePayload = {
-                    [`expectedProducts.${productCode}.scanned`]: increment(1),
-                    scannedBarcodes: [...conference.scannedBarcodes, cleanedBarcode]
-                };
 
-                await addLogEntry(`${cleanedBarcode}`, 'success');
-                await updateDoc(confDocRef, updatePayload);
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const conferenceSnap = await transaction.get(confDocRef);
+                        if (!conferenceSnap.exists()) {
+                            throw new Error('conference-not-found');
+                        }
+
+                        const data = conferenceSnap.data();
+                        if (data.endTime) {
+                            throw new Error('conference-complete');
+                        }
+
+                        const expectedProducts = data.expectedProducts || {};
+                        const product = expectedProducts[productCode];
+                        if (!product) {
+                            throw new Error('product-not-expected');
+                        }
+
+                        const currentScanned = product.scanned || 0;
+                        const expectedQty = product.expected || 0;
+                        const totalExpected = Object.values(expectedProducts).reduce((sum, p) => sum + (p.expected || 0), 0);
+                        const totalScanned = Object.values(expectedProducts).reduce((sum, p) => sum + (p.scanned || 0), 0);
+
+                        if (totalExpected > 0 && totalScanned >= totalExpected) {
+                            throw new Error('conference-full');
+                        }
+
+                        if (currentScanned >= expectedQty) {
+                            throw new Error('product-full');
+                        }
+
+                        const barcodeDocRef = doc(allBarcodesColRef, cleanedBarcode);
+                        const barcodeSnap = await transaction.get(barcodeDocRef);
+                        if (barcodeSnap.exists()) {
+                            throw new Error('barcode-duplicate');
+                        }
+
+                        const scannedBarcodes = data.scannedBarcodes || [];
+
+                        transaction.set(barcodeDocRef, { conferenceId: activeConferenceKey, scannedAt: serverTimestamp() });
+                        transaction.update(confDocRef, {
+                            [`expectedProducts.${productCode}.scanned`]: increment(1),
+                            scannedBarcodes: [...scannedBarcodes, cleanedBarcode],
+                            startTime: data.startTime || serverTimestamp()
+                        });
+                    });
+
+                    await addLogEntry(`${cleanedBarcode}`, 'success');
+                } catch (error) {
+                    const errorMessages = {
+                        'conference-not-found': 'Conferência não encontrada.',
+                        'conference-complete': 'A conferência já está completa.',
+                        'conference-full': 'A conferência já está completa.',
+                        'product-not-expected': `Produto '${productCode}' não está na lista de itens esperados.`,
+                        'product-full': `Todos os volumes do produto '${productCode}' já foram conferidos.`,
+                        'barcode-duplicate': `O código de barras '${cleanedBarcode}' já foi lido e registrado anteriormente.`
+                    };
+
+                    const message = errorMessages[error.message] || 'Erro ao processar o código de barras. Tente novamente.';
+                    await addLogEntry(`ERRO: ${message}`, 'error');
+                    showErrorAlert(message);
+                    return;
+                }
             }
 
             function handleAddProduct(e) {
