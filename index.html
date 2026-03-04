@@ -109,12 +109,12 @@
             <div id="dashboard-tab-content" class="hidden">
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 flex flex-col items-center text-center">
-                        <h3 class="text-lg font-semibold mb-2">Média de tempo (últimos 5)</h3>
+                        <h3 class="text-lg font-semibold mb-2">Média de tempo (últimos 10)</h3>
                         <p id="avg-time-last-5" class="text-3xl font-bold text-cyan-300">--:--:--</p>
                         <p class="text-sm text-gray-400 mt-1">Considera containers concluídos mais recentes com início e fim registrados.</p>
                     </div>
                     <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                        <h3 class="text-lg font-semibold mb-2">Últimos 5 concluídos</h3>
+                        <h3 class="text-lg font-semibold mb-2">Últimos 10 concluídos</h3>
                         <div id="last-5-header" class="hidden md:grid grid-cols-3 text-xs text-gray-400 uppercase tracking-wide pb-1 border-b border-gray-700 mb-2">
                             <span>Container</span>
                             <span>Duração</span>
@@ -574,9 +574,9 @@
                 noCompletedConferencesMessage.classList.toggle('hidden', completedVisibleCount > 0);
                 downloadCsvBtn.disabled = completedCount === 0;
 
-                // Dashboard metrics: average duration of last 5 completed
-                const lastFive = completedEntries.slice(0, 5).map(([key, conf]) => ({ key, conf }));
-                const durations = lastFive
+                // Dashboard metrics: average duration of last 10 completed
+                const lastTenForAvg = completedEntries.slice(0, 10).map(([key, conf]) => ({ key, conf }));
+                const durations = lastTenForAvg
                     .map(item => (item.conf.endTime && item.conf.startTime) ? (item.conf.endTime - item.conf.startTime) : null)
                     .filter(ms => ms !== null && ms >= 0);
                 if (durations.length > 0) {
@@ -586,6 +586,7 @@
                     avgTimeLast5El.textContent = '--:--:--';
                 }
 
+                const lastFive = completedEntries.slice(0, 10).map(([key, conf]) => ({ key, conf }));
                 last5ListEl.innerHTML = '';
                 if (lastFive.length === 0) {
                     last5HeaderEl.classList.add('hidden');
@@ -909,21 +910,38 @@
             function renderLog(conference) {
                 scanLog.innerHTML = '';
                 if (conference && conference.log) {
-                    const sortedLog = [...conference.log].sort((a, b) => {
-                         const timeA = a.timestamp?.toDate ? a.timestamp.toMillis() : a.timestamp;
-                         const timeB = b.timestamp?.toDate ? b.timestamp.toMillis() : b.timestamp;
-                         return timeA - timeB;
-                    });
+                    const sortedLog = conference.log
+                        .map((item, idx) => ({ ...item, __idx: idx }))
+                        .sort((a, b) => {
+                            const seqA = typeof a.seq === 'number' ? a.seq : Number.MAX_SAFE_INTEGER;
+                            const seqB = typeof b.seq === 'number' ? b.seq : Number.MAX_SAFE_INTEGER;
+                            if (seqA !== seqB) return seqA - seqB;
+
+                            const tsA = a.ts?.toDate ? a.ts.toMillis() : a.ts;
+                            const tsB = b.ts?.toDate ? b.ts.toMillis() : b.ts;
+                            if ((tsA || 0) !== (tsB || 0)) return (tsA || 0) - (tsB || 0);
+
+                            const timeA = a.timestamp?.toDate ? a.timestamp.toMillis() : a.timestamp;
+                            const timeB = b.timestamp?.toDate ? b.timestamp.toMillis() : b.timestamp;
+                            if ((timeA || 0) !== (timeB || 0)) return (timeA || 0) - (timeB || 0);
+
+                            return a.__idx - b.__idx;
+                        });
+
                     sortedLog.forEach(item => {
-                        let timestamp;
-                        if (item.timestamp && typeof item.timestamp.toDate === 'function') {
-                            timestamp = item.timestamp.toDate();
+                        let tsDate;
+                        if (item.ts && typeof item.ts.toDate === 'function') {
+                            tsDate = item.ts.toDate();
+                        } else if (item.timestamp && typeof item.timestamp.toDate === 'function') {
+                            tsDate = item.timestamp.toDate();
+                        } else if (typeof item.ts === 'number') {
+                            tsDate = new Date(item.ts);
                         } else if (typeof item.timestamp === 'number') {
-                            timestamp = new Date(item.timestamp);
+                            tsDate = new Date(item.timestamp);
                         } else {
-                            timestamp = new Date(); // Fallback
+                            tsDate = new Date(); // Fallback
                         }
-                        logScan(item.message, item.type, timestamp);
+                        logScan(item.message, item.type, tsDate);
                     });
                 }
             }
@@ -941,19 +959,27 @@
             async function addLogEntry(message, type) {
                 if (!activeConferenceKey) return;
                 const confDocRef = doc(conferencesColRef, activeConferenceKey);
-                const conference = conferences.get(activeConferenceKey);
-                
-                const newLogEntry = {
-                    message,
-                    type,
-                    timestamp: Date.now()
-                };
-
-                const currentLog = conference.log || [];
-                const updatedLog = [...currentLog, newLogEntry];
 
                 try {
-                    await updateDoc(confDocRef, { log: updatedLog });
+                    await runTransaction(db, async (transaction) => {
+                        const snap = await transaction.get(confDocRef);
+                        if (!snap.exists()) { return; }
+                        const data = snap.data();
+                        const currentLog = data.log || [];
+                        const currentSeq = data.logSeq || 0;
+                        const nextSeq = currentSeq + 1;
+
+                        const newLogEntry = {
+                            message,
+                            type,
+                            seq: nextSeq,
+                            ts: serverTimestamp(),
+                            timestamp: Date.now()
+                        };
+
+                        const updatedLog = [...currentLog, newLogEntry];
+                        transaction.update(confDocRef, { log: updatedLog, logSeq: nextSeq });
+                    });
                 } catch (error) {
                     console.error("Error adding log entry:", error);
                 }
